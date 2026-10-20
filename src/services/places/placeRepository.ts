@@ -127,6 +127,8 @@ class PlaceRepository {
         const { data, error } = await queryBuilder;
         if (!error && data) {
           pool = data as Place[];
+        } else {
+          pool = MOCK_VIETNAM_PLACES;
         }
       } catch (e) {
         // Fallback to local verified pool

@@ -10,8 +10,14 @@ const envSchema = z.object({
     .string()
     .optional()
     .default('mapbox://styles/mapbox/standard'),
-  SUPABASE_URL: z.string().optional().default(''),
-  SUPABASE_ANON_KEY: z.string().optional().default(''),
+  SUPABASE_URL: z
+    .string()
+    .optional()
+    .default('https://fuwimehbldqvaookauvj.supabase.co'),
+  SUPABASE_ANON_KEY: z
+    .string()
+    .optional()
+    .default('sb_publishable_4r75VX_rR_N5S5c1cZhKLw_ypp8XsVb'),
   APP_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ENABLE_MAP_TELEMETRY: z
     .string()
@@ -23,8 +29,12 @@ const envSchema = z.object({
 export const env = envSchema.parse({
   MAPBOX_ACCESS_TOKEN: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN,
   MAPBOX_STYLE_URL: process.env.EXPO_PUBLIC_MAPBOX_STYLE_URL,
-  SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
-  SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_URL:
+    process.env.EXPO_PUBLIC_SUPABASE_URL ||
+    'https://fuwimehbldqvaookauvj.supabase.co',
+  SUPABASE_ANON_KEY:
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+    'sb_publishable_4r75VX_rR_N5S5c1cZhKLw_ypp8XsVb',
   APP_ENV: process.env.EXPO_PUBLIC_APP_ENV,
   ENABLE_MAP_TELEMETRY: process.env.EXPO_PUBLIC_ENABLE_MAP_TELEMETRY,
 });
