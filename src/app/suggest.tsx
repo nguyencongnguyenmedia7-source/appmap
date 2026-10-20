@@ -31,6 +31,7 @@ import {
   Hotel,
   Users,
   Compass,
+  Crosshair,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -41,6 +42,7 @@ import { useAuthStore } from '@/store/authStore';
 import { usePlacesStore } from '@/store/placesStore';
 import { useMapStore } from '@/store/mapStore';
 import { placeRepository } from '@/services/places/placeRepository';
+import { locationService } from '@/services/location/locationService';
 import { triggerHaptic } from '@/utils/haptics';
 
 interface SuggestFormState {
@@ -52,6 +54,9 @@ interface SuggestFormState {
   phone: string;
   website: string;
   photos: string[];
+  latitude?: number;
+  longitude?: number;
+  locationSource: 'gps' | 'map_center' | 'city';
 }
 
 export default function SuggestPlaceScreen() {
@@ -68,13 +73,58 @@ export default function SuggestPlaceScreen() {
     phone: '',
     website: '',
     photos: [],
+    latitude: undefined,
+    longitude: undefined,
+    locationSource: 'city',
   });
 
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isCityOpen, setIsCityOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGettingGps, setIsGettingGps] = useState(false);
   const [submittedPlace, setSubmittedPlace] = useState<Place | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof SuggestFormState, string>>>({});
+
+  const handleUseCurrentGps = async () => {
+    triggerHaptic('selection');
+    setIsGettingGps(true);
+    try {
+      const { coords } = await locationService.getCurrentPosition();
+      if (coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)) {
+        setForm((prev) => ({
+          ...prev,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          locationSource: 'gps',
+        }));
+        Alert.alert(
+          'Đã lấy vị trí GPS',
+          `Toạ độ: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
+        );
+      }
+    } catch (_) {
+      Alert.alert(
+        'Không thể lấy GPS',
+        'Vui lòng kiểm tra quyền truy cập vị trí trên trình duyệt hoặc thiết bị.'
+      );
+    } finally {
+      setIsGettingGps(false);
+    }
+  };
+
+  const handleUseMapCenter = () => {
+    triggerHaptic('selection');
+    setForm((prev) => ({
+      ...prev,
+      longitude: center[0],
+      latitude: center[1],
+      locationSource: 'map_center',
+    }));
+    Alert.alert(
+      'Đã chọn tâm bản đồ',
+      `Toạ độ: ${center[1].toFixed(5)}, ${center[0].toFixed(5)}`
+    );
+  };
 
   const updateField = (field: keyof SuggestFormState, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -150,23 +200,41 @@ export default function SuggestPlaceScreen() {
     triggerHaptic('medium');
     setIsSubmitting(true);
 
-    // Calculate approximate coordinates based on selected city
     const matchedCity = VIETNAM_CITY_PRESETS.find(
       (c) => c.name.toLowerCase() === form.city.toLowerCase()
     );
-    const targetLng = matchedCity ? matchedCity.coordinates[0] + (Math.random() - 0.5) * 0.02 : center[0];
-    const targetLat = matchedCity ? matchedCity.coordinates[1] + (Math.random() - 0.5) * 0.02 : center[1];
 
-    await new Promise((r) => setTimeout(r, 900));
+    let targetLng = form.longitude;
+    let targetLat = form.latitude;
+
+    if (!targetLng || !targetLat) {
+      if (matchedCity) {
+        targetLng = matchedCity.coordinates[0];
+        targetLat = matchedCity.coordinates[1];
+      } else {
+        targetLng = center[0];
+        targetLat = center[1];
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 600));
+
+    // Generate valid UUIDv4 for Postgres/Supabase compatibility
+    const hex = (len: number) =>
+      Math.floor(Math.random() * 0xffffffff)
+        .toString(16)
+        .padStart(8, '0')
+        .slice(0, len);
+    const validUuid = `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
 
     const newPlace: Place = {
-      id: `custom-${Date.now()}`,
+      id: validUuid,
       name: form.name.trim(),
       slug: null,
       description: form.description.trim() || 'Địa điểm mới được đóng góp bởi cộng đồng CITYVERSE.',
       category: form.category || 'coffee',
       address: `${form.address.trim()}, ${form.city}`,
-      province_code: null,
+      province_code: matchedCity?.province || 'VN',
       administrative_metadata: null,
       latitude: targetLat,
       longitude: targetLng,
@@ -213,6 +281,9 @@ export default function SuggestPlaceScreen() {
       phone: '',
       website: '',
       photos: [],
+      latitude: undefined,
+      longitude: undefined,
+      locationSource: 'city',
     });
     setErrors({});
     setSubmittedPlace(null);
@@ -391,6 +462,65 @@ export default function SuggestPlaceScreen() {
               />
               {errors.address && (
                 <Text style={styles.errorText}>{errors.address}</Text>
+              )}
+            </View>
+
+            {/* Field: Map Coordinates Picker */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Toạ độ ghim trên bản đồ</Text>
+              <View style={styles.coordsButtonRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.coordsBtn,
+                    form.locationSource === 'gps' && styles.coordsBtnActive,
+                  ]}
+                  onPress={handleUseCurrentGps}
+                  activeOpacity={0.8}
+                >
+                  <Crosshair
+                    size={14}
+                    color={form.locationSource === 'gps' ? '#4F7DFF' : '#A3AEC2'}
+                  />
+                  <Text
+                    style={[
+                      styles.coordsBtnText,
+                      form.locationSource === 'gps' && styles.coordsBtnTextActive,
+                    ]}
+                  >
+                    {isGettingGps ? 'Đang lấy GPS...' : 'Lấy GPS của tôi'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.coordsBtn,
+                    form.locationSource === 'map_center' && styles.coordsBtnActive,
+                  ]}
+                  onPress={handleUseMapCenter}
+                  activeOpacity={0.8}
+                >
+                  <Compass
+                    size={14}
+                    color={form.locationSource === 'map_center' ? '#20D6E7' : '#A3AEC2'}
+                  />
+                  <Text
+                    style={[
+                      styles.coordsBtnText,
+                      form.locationSource === 'map_center' && styles.coordsBtnTextActive,
+                    ]}
+                  >
+                    Tâm bản đồ
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {form.latitude && form.longitude && (
+                <View style={styles.coordsBadge}>
+                  <MapPin size={12} color="#10B981" />
+                  <Text style={styles.coordsBadgeText}>
+                    Đã chọn: {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)} ({form.locationSource === 'gps' ? 'GPS thiết bị' : 'Tâm bản đồ'})
+                  </Text>
+                </View>
               )}
             </View>
 
@@ -725,6 +855,54 @@ const styles = StyleSheet.create({
   addAnotherBtnText: {
     color: '#A3AEC2',
     fontSize: 13.5,
+    fontWeight: '600',
+  },
+  coordsButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  coordsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  coordsBtnActive: {
+    borderColor: '#4F7DFF',
+    backgroundColor: 'rgba(79, 125, 255, 0.12)',
+  },
+  coordsBtnText: {
+    color: '#A3AEC2',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  coordsBtnTextActive: {
+    color: '#4F7DFF',
+    fontWeight: '700',
+  },
+  coordsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+  },
+  coordsBadgeText: {
+    color: '#10B981',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

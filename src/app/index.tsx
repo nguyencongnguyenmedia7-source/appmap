@@ -40,6 +40,7 @@ export default function CityverseMapScreen() {
     setSelectedPlace,
     activeCategoryFilter,
     searchQuery,
+    incrementCheckinCount,
   } = usePlacesStore();
 
   const { initializeAuth } = useAuthStore();
@@ -54,19 +55,22 @@ export default function CityverseMapScreen() {
     initializeAuth();
     loadInitialLocation();
 
-    // Immediately load places for default center (Hà Nội)
-    const initialBbox: BoundingBox = {
-      minLng: center[0] - 0.08,
-      minLat: center[1] - 0.08,
-      maxLng: center[0] + 0.08,
-      maxLat: center[1] + 0.08,
+    // Immediately load places for starting viewport
+    const loadInit = async () => {
+      const initialBbox: BoundingBox = {
+        minLng: center[0] - 0.08,
+        minLat: center[1] - 0.08,
+        maxLng: center[0] + 0.08,
+        maxLat: center[1] + 0.08,
+      };
+      const initialPlaces = await placeRepository.getPlacesInViewport({
+        bbox: initialBbox,
+        categories: activeCategoryFilter ? [activeCategoryFilter] : undefined,
+        limit: 60,
+      });
+      setPlaces(initialPlaces);
     };
-    const initialPlaces = placeRepository.getMockPlacesInViewport(
-      initialBbox,
-      activeCategoryFilter ? [activeCategoryFilter] : undefined,
-      60
-    );
-    setPlaces(initialPlaces);
+    loadInit();
   }, []);
 
   const loadInitialLocation = async () => {
@@ -228,12 +232,8 @@ export default function CityverseMapScreen() {
           place={selectedPlace}
           onClose={() => setIsCheckinModalOpen(false)}
           onSuccess={() => {
-            // Refresh places to update checkin count
             if (selectedPlace) {
-              setSelectedPlace({
-                ...selectedPlace,
-                checkin_count: selectedPlace.checkin_count + 1,
-              });
+              incrementCheckinCount(selectedPlace.id);
             }
           }}
         />

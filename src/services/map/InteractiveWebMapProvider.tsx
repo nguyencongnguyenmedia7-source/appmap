@@ -327,6 +327,39 @@ export const InteractiveWebMapProvider = forwardRef<MapCameraControls, CityMapPr
       }
     }, [displayMode]);
 
+    // 3.5 Auto-fly to selectedPlace when changed from outside (e.g. from suggest or search)
+    useEffect(() => {
+      const map = mapInstanceRef.current;
+      if (!map || !selectedPlace) return;
+
+      const lat = Number(selectedPlace.latitude);
+      const lng = Number(selectedPlace.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        isProgrammaticMoveRef.current = true;
+        map.flyTo([lat, lng], Math.max(map.getZoom(), 16), {
+          duration: 0.9,
+        });
+
+        const timer = setTimeout(() => {
+          try {
+            const bounds = map.getBounds();
+            onRegionChangeComplete(
+              {
+                minLng: bounds.getWest(),
+                minLat: bounds.getSouth(),
+                maxLng: bounds.getEast(),
+                maxLat: bounds.getNorth(),
+              },
+              [lng, lat],
+              map.getZoom()
+            );
+          } catch (_) {}
+        }, 950);
+
+        return () => clearTimeout(timer);
+      }
+    }, [selectedPlace?.id]);
+
     // 4. Update Place Markers
     useEffect(() => {
       const map = mapInstanceRef.current;
@@ -336,7 +369,13 @@ export const InteractiveWebMapProvider = forwardRef<MapCameraControls, CityMapPr
       const L = require('leaflet');
       markersLayer.clearLayers();
 
-      places.forEach((place) => {
+      // Ensure selectedPlace is always included in the marker list
+      const displayPlaces = [...places];
+      if (selectedPlace && !displayPlaces.some((p) => p.id === selectedPlace.id)) {
+        displayPlaces.unshift(selectedPlace);
+      }
+
+      displayPlaces.forEach((place) => {
         if (!place) return;
         const lat = Number(place.latitude);
         const lng = Number(place.longitude);
@@ -380,6 +419,7 @@ export const InteractiveWebMapProvider = forwardRef<MapCameraControls, CityMapPr
           const marker = L.marker([lat, lng], {
             icon: customIcon,
             title: place.name,
+            zIndexOffset: isSelected ? 500 : 10,
           });
 
           marker.on('click', () => {

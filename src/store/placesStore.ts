@@ -19,6 +19,7 @@ interface PlacesState {
   setIsLoading: (isLoading: boolean) => void;
   setIsCheckinModalVisible: (visible: boolean) => void;
   addPlace: (place: Place) => void;
+  incrementCheckinCount: (placeId: string) => void;
 }
 
 export const usePlacesStore = create<PlacesState>((set, get) => ({
@@ -31,7 +32,26 @@ export const usePlacesStore = create<PlacesState>((set, get) => ({
   isCheckinModalVisible: false,
 
   setPlaces: (places) => set({ places }),
-  addPlace: (place) => set((state) => ({ places: [place, ...state.places] })),
+  addPlace: (place) =>
+    set((state) => {
+      const exists = state.places.some((p) => p.id === place.id);
+      return {
+        places: exists ? state.places : [place, ...state.places],
+      };
+    }),
+  incrementCheckinCount: (placeId: string) =>
+    set((state) => ({
+      places: state.places.map((p) =>
+        p.id === placeId ? { ...p, checkin_count: (p.checkin_count || 0) + 1 } : p
+      ),
+      selectedPlace:
+        state.selectedPlace?.id === placeId
+          ? {
+              ...state.selectedPlace,
+              checkin_count: (state.selectedPlace.checkin_count || 0) + 1,
+            }
+          : state.selectedPlace,
+    })),
   setSelectedPlace: (selectedPlace) => set({ selectedPlace }),
   setActiveCategoryFilter: (activeCategoryFilter) => set({ activeCategoryFilter }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
