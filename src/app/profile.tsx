@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -33,6 +33,8 @@ import { THEME } from '@/constants/theme';
 import { useAuthStore } from '@/store/authStore';
 import { usePlacesStore } from '@/store/placesStore';
 import { useMapStore } from '@/store/mapStore';
+import { useCommunityStore, CheckinHistoryItem } from '@/store/communityStore';
+import { placeRepository } from '@/services/places/placeRepository';
 import { triggerHaptic } from '@/utils/haptics';
 import { VIETNAM_CITY_PRESETS } from '@/constants/vietnam';
 
@@ -43,17 +45,6 @@ interface BadgeItem {
   color: string;
   earned: boolean;
   description: string;
-}
-
-interface CheckinHistoryItem {
-  id: string;
-  placeName: string;
-  city: string;
-  coordinates: [number, number];
-  timeAgo: string;
-  xpEarned: number;
-  photoUrl?: string;
-  isVerified: boolean;
 }
 
 const BADGES: BadgeItem[] = [
@@ -67,63 +58,42 @@ const BADGES: BadgeItem[] = [
   { id: 'b8', name: 'Ngôi Sao Check-in', icon: '⭐', color: '#F59E0B', earned: false, description: 'Đạt chuỗi 14 ngày check-in liên tục' },
 ];
 
-const CHECKIN_HISTORY: CheckinHistoryItem[] = [
-  {
-    id: 'c1',
-    placeName: 'Café Giảng (Cà Phê Trứng)',
-    city: 'Hà Nội',
-    coordinates: [105.8542, 21.0335],
-    timeAgo: '2 giờ trước',
-    xpEarned: 100,
-    photoUrl: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=300&q=80',
-    isVerified: true,
-  },
-  {
-    id: 'c2',
-    placeName: 'Hồ Hoàn Kiếm (Hồ Gươm)',
-    city: 'Hà Nội',
-    coordinates: [105.8524, 21.0287],
-    timeAgo: 'Hôm qua',
-    xpEarned: 75,
-    photoUrl: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=300&q=80',
-    isVerified: true,
-  },
-  {
-    id: 'c3',
-    placeName: 'Landmark 81',
-    city: 'TP. Hồ Chí Minh',
-    coordinates: [106.7218, 10.7952],
-    timeAgo: '3 ngày trước',
-    xpEarned: 50,
-    isVerified: true,
-  },
-  {
-    id: 'c4',
-    placeName: 'Cầu Rồng Đà Nẵng',
-    city: 'Đà Nẵng',
-    coordinates: [108.2272, 16.0611],
-    timeAgo: '1 tuần trước',
-    xpEarned: 75,
-    photoUrl: 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?auto=format&fit=crop&w=300&q=80',
-    isVerified: true,
-  },
-];
-
 type ProfileTab = 'activity' | 'badges' | 'stats';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthStore();
-  const { places, setSelectedPlace } = usePlacesStore();
+  const { addPlace, setSelectedPlace } = usePlacesStore();
   const { setCenter, setZoom, selectCity } = useMapStore();
+  const { checkins, loadInitialData } = useCommunityStore();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('activity');
   const [selectedBadge, setSelectedBadge] = useState<BadgeItem | null>(null);
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
 
   const xpCurrent = user?.xp || 1850;
   const level = user?.level || 4;
   const xpInCurrentLevel = xpCurrent % 500;
   const xpNeededNext = 500 - xpInCurrentLevel;
   const progressPercent = Math.min(100, Math.round((xpInCurrentLevel / 500) * 100));
+
+  // Compute ranking dynamically based on user XP
+  const calculateRank = (xp: number) => {
+    if (xp >= 2850) return 1;
+    if (xp >= 2640) return 2;
+    if (xp >= 2210) return 3;
+    if (xp >= 1980) return 4;
+    if (xp >= 1750) return 5;
+    if (xp >= 1520) return 6;
+    if (xp >= 1340) return 7;
+    if (xp >= 1190) return 8;
+    return 12;
+  };
+
+  const currentRank = calculateRank(xpCurrent);
+  const totalCitiesVisited = Math.max(3, new Set(checkins.map((c) => c.city)).size);
 
   const handleTabChange = (tab: ProfileTab) => {
     triggerHaptic('selection');
@@ -132,8 +102,6 @@ export default function ProfileScreen() {
 
   const handleJumpToPlace = (item: CheckinHistoryItem) => {
     triggerHaptic('selection');
-    setCenter(item.coordinates);
-    setZoom(16.5);
 
     const matchedCity = VIETNAM_CITY_PRESETS.find(
       (c) => item.city.toLowerCase().includes(c.name.toLowerCase())
@@ -142,13 +110,20 @@ export default function ProfileScreen() {
       selectCity(matchedCity.id);
     }
 
-    const matchedPlace = places.find(
-      (p) =>
-        p.name.toLowerCase().includes(item.placeName.toLowerCase()) ||
-        item.placeName.toLowerCase().includes(p.name.toLowerCase())
+    const matchedPlace = placeRepository.findPlaceByNameOrCoords(
+      item.placeName,
+      item.coordinates
     );
+
     if (matchedPlace) {
+      addPlace(matchedPlace);
       setSelectedPlace(matchedPlace);
+      setCenter([matchedPlace.longitude, matchedPlace.latitude]);
+      setZoom(16.5);
+    } else {
+      setSelectedPlace(null);
+      setCenter(item.coordinates);
+      setZoom(16.5);
     }
 
     router.replace('/');
@@ -220,22 +195,22 @@ export default function ProfileScreen() {
           {/* Stats 4-Grid */}
           <View style={styles.statsGrid}>
             <View style={styles.statBox}>
-              <Text style={styles.statVal}>28</Text>
+              <Text style={styles.statVal}>{checkins.length}</Text>
               <Text style={styles.statLbl}>Check-in</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statVal}>5</Text>
+              <Text style={styles.statVal}>{BADGES.filter((b) => b.earned).length}</Text>
               <Text style={styles.statLbl}>Huy hiệu</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statVal}>4</Text>
+              <Text style={styles.statVal}>{totalCitiesVisited}</Text>
               <Text style={styles.statLbl}>Thành phố</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statVal}>#12</Text>
+              <Text style={styles.statVal}>#{currentRank}</Text>
               <Text style={styles.statLbl}>Xếp hạng</Text>
             </View>
           </View>
@@ -280,8 +255,8 @@ export default function ProfileScreen() {
         {/* Tab Content: Activity */}
         {activeTab === 'activity' && (
           <View style={styles.tabContentWrap}>
-            <Text style={styles.sectionTitle}>Lịch Sử Check-in & Đóng Góp</Text>
-            {CHECKIN_HISTORY.map((item) => (
+            <Text style={styles.sectionTitle}>Lịch Sử Check-in & Đóng Góp ({checkins.length})</Text>
+            {checkins.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.checkinCard}

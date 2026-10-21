@@ -19,6 +19,7 @@ interface PlacesState {
   setIsLoading: (isLoading: boolean) => void;
   setIsCheckinModalVisible: (visible: boolean) => void;
   addPlace: (place: Place) => void;
+  deletePlace: (placeId: string) => void;
   incrementCheckinCount: (placeId: string) => void;
 }
 
@@ -39,6 +40,11 @@ export const usePlacesStore = create<PlacesState>((set, get) => ({
         places: exists ? state.places : [place, ...state.places],
       };
     }),
+  deletePlace: (placeId) =>
+    set((state) => ({
+      places: state.places.filter((p) => p.id !== placeId),
+      selectedPlace: state.selectedPlace?.id === placeId ? null : state.selectedPlace,
+    })),
   incrementCheckinCount: (placeId: string) =>
     set((state) => ({
       places: state.places.map((p) =>

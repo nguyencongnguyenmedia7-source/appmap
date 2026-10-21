@@ -12,6 +12,7 @@ import { useMapStore } from '@/store/mapStore';
 import { usePlacesStore } from '@/store/placesStore';
 import { useAuthStore } from '@/store/authStore';
 import { useAdminStore } from '@/store/adminStore';
+import { useCommunityStore } from '@/store/communityStore';
 import { placeRepository } from '@/services/places/placeRepository';
 import { locationService } from '@/services/location/locationService';
 import { Place, BoundingBox } from '@/types';
@@ -53,6 +54,7 @@ export default function CityverseMapScreen() {
   // Initialize auth session, GPS, and initial Vietnam places
   useEffect(() => {
     initializeAuth();
+    useCommunityStore.getState().loadInitialData();
     loadInitialLocation();
 
     // Immediately load places for starting viewport
@@ -123,15 +125,37 @@ export default function CityverseMapScreen() {
     };
   }, [searchQuery, activeCategoryFilter]);
 
+  // Immediately re-filter map pins whenever category filter changes
+  useEffect(() => {
+    const currentBbox = useMapStore.getState().bbox || {
+      minLng: center[0] - 0.08,
+      minLat: center[1] - 0.08,
+      maxLng: center[0] + 0.08,
+      maxLat: center[1] + 0.08,
+    };
+    placeRepository
+      .getPlacesInViewport({
+        bbox: currentBbox,
+        categories: activeCategoryFilter ? [activeCategoryFilter] : undefined,
+        limit: 60,
+      })
+      .then((filteredPlaces) => {
+        setPlaces(filteredPlaces);
+      });
+  }, [activeCategoryFilter]);
+
   // Handle selecting a place (flies camera to place coordinates)
   const handleSelectPlace = (place: Place) => {
     setSelectedPlace(place);
+    setCenter([place.longitude, place.latitude]);
     mapRef.current?.flyTo([place.longitude, place.latitude], 17, 60, 0);
   };
 
   // Quick jump between Vietnam cities
-  const handleCitySelected = (coords: [number, number], targetZoom: number, targetPitch: number) => {
+  const handleCitySelected = async (coords: [number, number], targetZoom: number, targetPitch: number) => {
     setSelectedPlace(null);
+    setCenter(coords);
+    setZoom(targetZoom);
     mapRef.current?.flyTo(coords, targetZoom, targetPitch, 0);
 
     // Immediately load places for this city so pins show up right away
@@ -141,11 +165,11 @@ export default function CityverseMapScreen() {
       maxLng: coords[0] + 0.1,
       maxLat: coords[1] + 0.1,
     };
-    const cityPlaces = placeRepository.getMockPlacesInViewport(
-      cityBbox,
-      activeCategoryFilter ? [activeCategoryFilter] : undefined,
-      60
-    );
+    const cityPlaces = await placeRepository.getPlacesInViewport({
+      bbox: cityBbox,
+      categories: activeCategoryFilter ? [activeCategoryFilter] : undefined,
+      limit: 60,
+    });
     setPlaces(cityPlaces);
   };
 

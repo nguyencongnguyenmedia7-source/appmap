@@ -26,6 +26,7 @@ import { placeRepository } from '@/services/places/placeRepository';
 import { verifyProximityForCheckin, formatDistance } from '@/utils/geo';
 import { useAuthStore } from '@/store/authStore';
 import { useMapStore } from '@/store/mapStore';
+import { useCommunityStore } from '@/store/communityStore';
 
 interface CheckinModalProps {
   visible: boolean;
@@ -111,6 +112,19 @@ export const CheckinModal: React.FC<CheckinModalProps> = ({
 
     if (result.success) {
       addXp(result.xpAwarded);
+
+      // Record check-in to user history and community feed
+      useCommunityStore.getState().addCheckinRecord({
+        placeName: place.name,
+        city: place.address.split(',').pop()?.trim() || 'Việt Nam',
+        coordinates: [place.longitude, place.latitude],
+        timeAgo: 'Vừa xong',
+        xpEarned: result.xpAwarded,
+        photoUrl: photoUri || undefined,
+        caption: caption.trim() || undefined,
+        isVerified: result.isVerified,
+      });
+
       Alert.alert('Thành công 🎉', result.message, [
         {
           text: 'Tuyệt vời',

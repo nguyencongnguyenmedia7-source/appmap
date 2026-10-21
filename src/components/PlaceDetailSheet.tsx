@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Image,
   useWindowDimensions,
+  Linking,
 } from 'react-native';
 import {
   MapPin,
@@ -14,6 +15,9 @@ import {
   X,
   Navigation2,
   Sparkles,
+  Phone,
+  Globe,
+  Navigation,
 } from 'lucide-react-native';
 import { THEME } from '@/constants/theme';
 import { PLACE_CATEGORIES } from '@/constants/vietnam';
@@ -46,6 +50,25 @@ export const PlaceDetailSheet: React.FC<PlaceDetailSheetProps> = ({
   const handleOpenCheckin = () => {
     triggerHaptic('medium');
     onOpenCheckin();
+  };
+
+  const handleOpenDirections = () => {
+    triggerHaptic('light');
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${place.latitude},${place.longitude}`;
+    Linking.openURL(url).catch(() => {});
+  };
+
+  const handleCall = () => {
+    if (!place.phone) return;
+    triggerHaptic('light');
+    Linking.openURL(`tel:${place.phone}`).catch(() => {});
+  };
+
+  const handleOpenWebsite = () => {
+    if (!place.website) return;
+    triggerHaptic('light');
+    const target = place.website.startsWith('http') ? place.website : `https://${place.website}`;
+    Linking.openURL(target).catch(() => {});
   };
 
   const distanceMeters = userLocation
@@ -135,16 +158,44 @@ export const PlaceDetailSheet: React.FC<PlaceDetailSheetProps> = ({
           </Text>
         </View>
 
-        {/* Action Button: Check in */}
+        {/* Description */}
+        {Boolean(place.description) && (
+          <Text style={styles.descriptionText} numberOfLines={2}>
+            {place.description}
+          </Text>
+        )}
+
+        {/* Action Buttons Row */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.checkinBtn}
             onPress={handleOpenCheckin}
             activeOpacity={0.8}
           >
-            <Sparkles size={16} color="#FFFFFF" />
-            <Text style={styles.checkinBtnText}>Check-in nhận điểm thưởng</Text>
+            <Sparkles size={15} color="#FFFFFF" />
+            <Text style={styles.checkinBtnText}>Check-in (+75 XP)</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.directionsBtn}
+            onPress={handleOpenDirections}
+            activeOpacity={0.8}
+          >
+            <Navigation size={14} color="#38BDF8" />
+            <Text style={styles.directionsBtnText}>Chỉ đường</Text>
+          </TouchableOpacity>
+
+          {Boolean(place.phone) && (
+            <TouchableOpacity style={styles.iconActionBtn} onPress={handleCall} activeOpacity={0.8}>
+              <Phone size={14} color="#10B981" />
+            </TouchableOpacity>
+          )}
+
+          {Boolean(place.website) && (
+            <TouchableOpacity style={styles.iconActionBtn} onPress={handleOpenWebsite} activeOpacity={0.8}>
+              <Globe size={14} color="#F59E0B" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -306,17 +357,27 @@ const styles = StyleSheet.create({
     color: '#A3AEC2',
     fontSize: 12,
   },
+  descriptionText: {
+    color: '#94A3B8',
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 6,
+  },
   actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginTop: 12,
   },
   checkinBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4F7DFF',
-    paddingVertical: 12,
-    borderRadius: 14,
-    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
     shadowColor: '#4F7DFF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -325,8 +386,35 @@ const styles = StyleSheet.create({
   },
   checkinBtnText: {
     color: '#FFFFFF',
-    fontSize: 13.5,
+    fontSize: 12.5,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  directionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+  },
+  directionsBtnText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  iconActionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -51,9 +51,8 @@ const generateLeaderboard = (
   currentUserAvatar: string,
   currentUserLevel: number
 ): LeaderboardEntry[] => {
-  const base: LeaderboardEntry[] = [
+  const others: Omit<LeaderboardEntry, 'rank'>[] = [
     {
-      rank: 1,
       userId: 'u1',
       userName: 'Nguyễn Thành Lộc',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
@@ -64,7 +63,6 @@ const generateLeaderboard = (
       rankChange: 0,
     },
     {
-      rank: 2,
       userId: 'u2',
       userName: 'Trần Minh Phúc',
       avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
@@ -75,7 +73,6 @@ const generateLeaderboard = (
       rankChange: 1,
     },
     {
-      rank: 3,
       userId: 'u3',
       userName: 'Lê Thu Hương',
       avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
@@ -86,7 +83,6 @@ const generateLeaderboard = (
       rankChange: -1,
     },
     {
-      rank: 4,
       userId: 'u4',
       userName: 'Phạm Quốc Bảo',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
@@ -97,7 +93,6 @@ const generateLeaderboard = (
       rankChange: 2,
     },
     {
-      rank: 5,
       userId: 'u5',
       userName: 'Võ Thị Lan Anh',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
@@ -108,7 +103,6 @@ const generateLeaderboard = (
       rankChange: 0,
     },
     {
-      rank: 6,
       userId: 'u6',
       userName: 'Hoàng Việt Anh',
       avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
@@ -119,7 +113,6 @@ const generateLeaderboard = (
       rankChange: -2,
     },
     {
-      rank: 7,
       userId: 'u7',
       userName: 'Nguyễn Thị Mai',
       avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
@@ -130,7 +123,6 @@ const generateLeaderboard = (
       rankChange: 1,
     },
     {
-      rank: 8,
       userId: 'u8',
       userName: 'Đặng Minh Tuấn',
       avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
@@ -140,21 +132,36 @@ const generateLeaderboard = (
       level: 6,
       rankChange: 0,
     },
-    // Current user dynamic entry
-    {
-      rank: 12,
-      userId: 'current-user',
-      userName: currentUserName || 'Nguyễn Việt Explorer',
-      avatarUrl: currentUserAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      province: 'Hà Nội',
-      xp: currentUserXp,
-      checkins: Math.floor(currentUserXp / 50),
-      level: currentUserLevel,
-      rankChange: 3,
-      isCurrentUser: true,
-    },
   ];
-  return base;
+
+  // Scale user XP for the period
+  const userXpPeriod =
+    period === 'week'
+      ? currentUserXp
+      : period === 'month'
+      ? Math.round(currentUserXp * 3.8)
+      : Math.round(currentUserXp * 18.5);
+
+  const currentUserItem: Omit<LeaderboardEntry, 'rank'> = {
+    userId: 'current-user',
+    userName: currentUserName || 'Nguyễn Việt Explorer',
+    avatarUrl:
+      currentUserAvatar ||
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    province: 'Hà Nội',
+    xp: userXpPeriod,
+    checkins: Math.floor(userXpPeriod / 50),
+    level: currentUserLevel,
+    rankChange: 2,
+    isCurrentUser: true,
+  };
+
+  const combined = [...others, currentUserItem].sort((a, b) => b.xp - a.xp);
+
+  return combined.map((entry, index) => ({
+    ...entry,
+    rank: index + 1,
+  }));
 };
 
 function RankDisplay({ rank }: { rank: number }) {
@@ -212,7 +219,7 @@ const rankChangeStyles = StyleSheet.create({
 });
 
 function Podium({ entries }: { entries: LeaderboardEntry[] }) {
-  const top3 = entries.filter((e) => e.rank <= 3 && !e.isCurrentUser).slice(0, 3);
+  const top3 = entries.filter((e) => e.rank <= 3).slice(0, 3);
   if (top3.length < 3) return null;
 
   const order = [top3[1], top3[0], top3[2]]; // 2nd, 1st, 3rd

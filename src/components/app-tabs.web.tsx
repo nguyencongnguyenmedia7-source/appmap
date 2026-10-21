@@ -16,7 +16,7 @@ export default function AppTabs() {
       <TabSlot style={{ height: '100%', flex: 1 }} />
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
+          <TabTrigger name="index" href="/" asChild>
             <TabButton
               title="Bản đồ"
               icon={(active) => (

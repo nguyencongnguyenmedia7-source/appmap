@@ -43,6 +43,7 @@ import { usePlacesStore } from '@/store/placesStore';
 import { useMapStore } from '@/store/mapStore';
 import { placeRepository } from '@/services/places/placeRepository';
 import { locationService } from '@/services/location/locationService';
+import { useCommunityStore } from '@/store/communityStore';
 import { triggerHaptic } from '@/utils/haptics';
 
 interface SuggestFormState {
@@ -265,6 +266,24 @@ export default function SuggestPlaceScreen() {
     addPlace(newPlace);
     addXp(50);
 
+    // Share discovery to community feed
+    useCommunityStore.getState().addFeedItem({
+      userName: user?.full_name || 'Khách khám phá',
+      userAvatar:
+        user?.avatar_url ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      placeName: newPlace.name,
+      placeCity: form.city,
+      coordinates: [newPlace.longitude, newPlace.latitude],
+      timeAgo: 'Vừa xong',
+      caption: `Vừa đóng góp địa điểm mới: "${newPlace.name}" tại ${form.city}!`,
+      imageUrl: newPlace.cover_image_url || undefined,
+      likes: 1,
+      comments: 0,
+      isVerified: true,
+      xpEarned: 50,
+    });
+
     setIsSubmitting(false);
     setSubmittedPlace(newPlace);
     triggerHaptic('success');
@@ -391,7 +410,15 @@ export default function SuggestPlaceScreen() {
                       style={[styles.chip, isSelected && styles.chipActive]}
                       onPress={() => {
                         triggerHaptic('selection');
-                        updateField('city', c.name);
+                        setForm((prev) => ({
+                          ...prev,
+                          city: c.name,
+                          latitude: prev.locationSource === 'city' ? c.coordinates[1] : prev.latitude,
+                          longitude: prev.locationSource === 'city' ? c.coordinates[0] : prev.longitude,
+                        }));
+                        if (errors.city) {
+                          setErrors((prev) => ({ ...prev, city: undefined }));
+                        }
                       }}
                       activeOpacity={0.8}
                     >

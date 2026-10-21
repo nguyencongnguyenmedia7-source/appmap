@@ -10,6 +10,7 @@ import {
   Switch,
   Image,
   Alert,
+  Modal,
 } from 'react-native';
 import {
   Sliders,
@@ -41,6 +42,7 @@ import { usePlacesStore } from '@/store/placesStore';
 import { useMapStore } from '@/store/mapStore';
 import { VIETNAM_CITY_PRESETS } from '@/constants/vietnam';
 import { MOCK_VIETNAM_PLACES } from '@/services/places/mockVietnamPlaces';
+import { placeRepository } from '@/services/places/placeRepository';
 import { MapDisplayMode, Place } from '@/types';
 import { triggerHaptic } from '@/utils/haptics';
 
@@ -49,7 +51,7 @@ type AdminTab = 'ui' | 'places' | 'cities' | 'system';
 export default function AdminScreen() {
   const { config, updateConfig, resetConfig, approvedPlacesCount, incrementApprovedCount } =
     useAdminStore();
-  const { places, addPlace, setPlaces, setSelectedPlace } = usePlacesStore();
+  const { places, addPlace, deletePlace, setPlaces, setSelectedPlace } = usePlacesStore();
   const { setCenter, setZoom, setPitch, selectCity, setDisplayMode } = useMapStore();
 
   // Ensure full real-world place repository is populated
@@ -68,6 +70,85 @@ export default function AdminScreen() {
   const [newName, setNewName] = useState('');
   const [newCity, setNewCity] = useState('Hà Nội');
   const [newAddress, setNewAddress] = useState('');
+  const [newCategory, setNewCategory] = useState<'coffee' | 'restaurant' | 'tourism' | 'culture'>('coffee');
+
+  const handleDeletePlace = (place: Place) => {
+    triggerHaptic('warning');
+    Alert.alert('Xóa địa điểm', `Bạn có chắc muốn xóa ghim "${place.name}" khỏi bản đồ?`, [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: () => {
+          placeRepository.deletePlace(place.id);
+          deletePlace(place.id);
+          triggerHaptic('success');
+          Alert.alert('Thành công', `Đã xóa "${place.name}" khỏi hệ thống.`);
+        },
+      },
+    ]);
+  };
+
+  const handleAddNewPlace = () => {
+    if (!newName.trim() || !newAddress.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên địa điểm và địa chỉ.');
+      return;
+    }
+
+    const matchedCity = VIETNAM_CITY_PRESETS.find(
+      (c) => c.name.toLowerCase() === newCity.toLowerCase()
+    );
+    const coords = matchedCity ? matchedCity.coordinates : [105.8542, 21.0285];
+
+    const hex = (len: number) =>
+      Math.floor(Math.random() * 0xffffffff)
+        .toString(16)
+        .padStart(8, '0')
+        .slice(0, len);
+    const validUuid = `${hex(8)}-${hex(4)}-4${hex(3)}-a${hex(3)}-${hex(12)}`;
+
+    const newPlace: Place = {
+      id: validUuid,
+      name: newName.trim(),
+      slug: null,
+      description: 'Địa điểm được thêm bởi Quản trị viên CITYVERSE.',
+      category: newCategory,
+      address: `${newAddress.trim()}, ${newCity}`,
+      province_code: matchedCity?.province || 'VN',
+      administrative_metadata: null,
+      latitude: coords[1],
+      longitude: coords[0],
+      entrance_latitude: null,
+      entrance_longitude: null,
+      location_accuracy_meters: 10,
+      data_source: 'ADMIN',
+      external_source_id: null,
+      verification_status: 'verified',
+      opening_hours: null,
+      phone: null,
+      website: null,
+      cover_image_url:
+        'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80',
+      checkin_count: 1,
+      post_count: 0,
+      rating_average: 5.0,
+      created_by: 'admin',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_verified_at: new Date().toISOString(),
+      is_active: true,
+    };
+
+    placeRepository.addCustomPlace(newPlace);
+    addPlace(newPlace);
+    incrementApprovedCount();
+    triggerHaptic('success');
+
+    setNewName('');
+    setNewAddress('');
+    setIsAddModalOpen(false);
+    Alert.alert('Thành công 🎉', `Đã thêm ghim "${newPlace.name}" vào bản đồ!`);
+  };
 
   const handleTabChange = (tab: AdminTab) => {
     triggerHaptic('selection');
@@ -495,6 +576,17 @@ export default function AdminScreen() {
                 <Text style={styles.cardTitle}>
                   Kho Địa Danh Thực Tế ({filteredPlaces.length}/{places.length})
                 </Text>
+                <TouchableOpacity
+                  style={styles.addPlaceBtn}
+                  onPress={() => {
+                    triggerHaptic('medium');
+                    setIsAddModalOpen(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Plus size={13} color="#FFFFFF" strokeWidth={2.4} />
+                  <Text style={styles.addPlaceBtnText}>Thêm ghim</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.placesList}>
@@ -527,14 +619,24 @@ export default function AdminScreen() {
                       </Text>
                     </View>
 
-                    <TouchableOpacity
-                      style={styles.previewBtn}
-                      onPress={() => handlePreviewPlace(place)}
-                      activeOpacity={0.7}
-                    >
-                      <Eye size={14} color="#20D6E7" />
-                      <Text style={styles.previewBtnText}>Xem</Text>
-                    </TouchableOpacity>
+                    <View style={styles.placeActionRow}>
+                      <TouchableOpacity
+                        style={styles.previewBtn}
+                        onPress={() => handlePreviewPlace(place)}
+                        activeOpacity={0.7}
+                      >
+                        <Eye size={13} color="#20D6E7" />
+                        <Text style={styles.previewBtnText}>Xem</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => handleDeletePlace(place)}
+                        activeOpacity={0.7}
+                      >
+                        <Trash2 size={13} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -631,6 +733,70 @@ export default function AdminScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Admin Quick Add Place Modal */}
+      <Modal
+        visible={isAddModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsAddModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm Địa Điểm Ghim Nhanh</Text>
+              <TouchableOpacity
+                onPress={() => setIsAddModalOpen(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <AlertCircle size={20} color="#76839A" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>Tên địa điểm:</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="VD: Cà phê Trứng Giảng..."
+              placeholderTextColor="#76839A"
+              value={newName}
+              onChangeText={setNewName}
+            />
+
+            <Text style={styles.modalLabel}>Thành phố:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+              {VIETNAM_CITY_PRESETS.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.cityChip, newCity === c.name && styles.cityChipActive]}
+                  onPress={() => setNewCity(c.name)}
+                >
+                  <Text style={[styles.cityChipText, newCity === c.name && styles.cityChipTextActive]}>
+                    {c.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.modalLabel}>Địa chỉ:</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Số nhà, tên đường..."
+              placeholderTextColor="#76839A"
+              value={newAddress}
+              onChangeText={setNewAddress}
+            />
+
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, { backgroundColor: config.primaryAccent }]}
+              onPress={handleAddNewPlace}
+              activeOpacity={0.8}
+            >
+              <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />
+              <Text style={styles.modalSubmitBtnText}>Xác nhận ghim địa điểm</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -992,6 +1158,117 @@ const styles = StyleSheet.create({
     color: '#76839A',
     fontSize: 10,
     marginTop: 2,
+  },
+  addPlaceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#4F7DFF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  addPlaceBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  placeActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deleteBtn: {
+    padding: 7,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#111827',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    color: '#F4F7FF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalLabel: {
+    color: '#A3AEC2',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  modalInput: {
+    backgroundColor: '#1B2435',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#F4F7FF',
+    fontSize: 13,
+  },
+  cityChip: {
+    backgroundColor: '#1B2435',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  cityChipActive: {
+    backgroundColor: '#4F7DFF',
+    borderColor: '#4F7DFF',
+  },
+  cityChipText: {
+    color: '#A3AEC2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cityChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalSubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#4F7DFF',
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 18,
+    shadowColor: '#4F7DFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  modalSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   previewBtn: {
     flexDirection: 'row',

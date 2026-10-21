@@ -64,6 +64,7 @@ export const MapHeaderSearch: React.FC<MapHeaderSearchProps> = ({
   const handleSelectPlace = (place: Place) => {
     triggerHaptic('selection');
     addSearchHistory(place.name);
+    setSearchQuery('');
     setIsFocused(false);
     onSelectPlaceResult(place);
   };
@@ -80,7 +81,7 @@ export const MapHeaderSearch: React.FC<MapHeaderSearchProps> = ({
 
   const handleCategoryPress = (category: PlaceCategory | null) => {
     triggerHaptic('selection');
-    setActiveCategoryFilter(category);
+    setActiveCategoryFilter(activeCategoryFilter === category ? null : category);
   };
 
   const handleSelectCity = (cityId: string) => {
@@ -145,7 +146,7 @@ export const MapHeaderSearch: React.FC<MapHeaderSearchProps> = ({
     }
   };
 
-  const isDropdownVisible = isFocused || searchQuery.trim().length > 0;
+  const isDropdownVisible = isFocused;
 
   return (
     <View style={[styles.container, !isMobile && styles.containerFloating]}>

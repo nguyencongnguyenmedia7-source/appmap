@@ -446,6 +446,67 @@ class PlaceRepository {
       })();
     }
   }
+
+  /**
+   * Deletes a place from custom places and active pool
+   */
+  deletePlace(placeId: string): boolean {
+    const prevLen = this.customPlaces.length;
+    this.customPlaces = this.customPlaces.filter((p) => p.id !== placeId);
+
+    // Also remove from mock array if present
+    const mockIdx = MOCK_VIETNAM_PLACES.findIndex((p) => p.id === placeId);
+    if (mockIdx >= 0) {
+      MOCK_VIETNAM_PLACES.splice(mockIdx, 1);
+    }
+
+    if (this.customPlaces.length !== prevLen) {
+      this.saveCustomPlacesToStorage();
+    }
+
+    if (isSupabaseConfigured) {
+      (async () => {
+        try {
+          await supabase.from('places').update({ is_active: false }).eq('id', placeId);
+        } catch (_) {}
+      })();
+    }
+
+    return true;
+  }
+
+  /**
+   * Returns all active places
+   */
+  getAllPlaces(): Place[] {
+    return this.mergeCustomPlaces(MOCK_VIETNAM_PLACES);
+  }
+
+  /**
+   * Searches repository for place matching name or coordinate proximity
+   */
+  findPlaceByNameOrCoords(name?: string, coords?: [number, number]): Place | undefined {
+    const all = this.getAllPlaces();
+
+    if (name && name.trim()) {
+      const q = name.trim();
+      const directMatch = all.find(
+        (p) => matchesVietnameseSearch(p.name, q) || matchesVietnameseSearch(q, p.name)
+      );
+      if (directMatch) return directMatch;
+    }
+
+    if (coords && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) {
+      const closeMatch = all.find((p) => {
+        const dist = haversineDistance(coords[1], coords[0], p.latitude, p.longitude);
+        return dist <= 250; // within 250m
+      });
+      if (closeMatch) return closeMatch;
+    }
+
+    return undefined;
+  }
 }
 
 export const placeRepository = new PlaceRepository();
+

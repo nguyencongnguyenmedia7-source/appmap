@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -30,122 +30,44 @@ import { THEME } from '@/constants/theme';
 import { useAuthStore } from '@/store/authStore';
 import { usePlacesStore } from '@/store/placesStore';
 import { useMapStore } from '@/store/mapStore';
+import { useCommunityStore, CommunityFeedItem } from '@/store/communityStore';
+import { placeRepository } from '@/services/places/placeRepository';
 import { triggerHaptic } from '@/utils/haptics';
 import { VIETNAM_CITY_PRESETS } from '@/constants/vietnam';
-
-interface CommunityFeedItem {
-  id: string;
-  userName: string;
-  userAvatar: string;
-  placeName: string;
-  placeCity: string;
-  coordinates: [number, number]; // [lng, lat]
-  timeAgo: string;
-  caption: string;
-  imageUrl?: string;
-  likes: number;
-  comments: number;
-  isVerified: boolean;
-  xpEarned: number;
-}
-
-const INITIAL_FEED: CommunityFeedItem[] = [
-  {
-    id: 'f1',
-    userName: 'Lan Hương',
-    userAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
-    placeName: 'Hồ Hoàn Kiếm (Hồ Gươm)',
-    placeCity: 'Hà Nội',
-    coordinates: [105.8524, 21.0287],
-    timeAgo: '15 phút trước',
-    caption: 'Sáng sớm se lạnh đi dạo quanh Bờ Hồ ngắm Tháp Rùa và thưởng thức cà phê trứng! Thủ đô đẹp quá 🇻🇳',
-    imageUrl: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80',
-    likes: 42,
-    comments: 6,
-    isVerified: true,
-    xpEarned: 75,
-  },
-  {
-    id: 'f2',
-    userName: 'Minh Tuấn',
-    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    placeName: 'Landmark 81',
-    placeCity: 'TP. Hồ Chí Minh',
-    coordinates: [106.7218, 10.7952],
-    timeAgo: '1 giờ trước',
-    caption: 'Góc nhìn 3D từ công viên bờ sông nhìn lên đỉnh Landmark 81 cực kỳ hiện đại và hoành tráng!',
-    imageUrl: 'https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=800&q=80',
-    likes: 89,
-    comments: 12,
-    isVerified: true,
-    xpEarned: 100,
-  },
-  {
-    id: 'f3',
-    userName: 'Quốc Bảo',
-    userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-    placeName: 'Cầu Rồng Đà Nẵng',
-    placeCity: 'Đà Nẵng',
-    coordinates: [108.2272, 16.0611],
-    timeAgo: '3 giờ trước',
-    caption: 'Đón xem màn phun lửa và phun nước của Cầu Rồng tối cuối tuần cùng hội bạn thân.',
-    imageUrl: 'https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?auto=format&fit=crop&w=800&q=80',
-    likes: 67,
-    comments: 8,
-    isVerified: true,
-    xpEarned: 75,
-  },
-  {
-    id: 'f4',
-    userName: 'Hoàng Yến',
-    userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    placeName: 'Đại Nội Huế',
-    placeCity: 'Huế',
-    coordinates: [107.5796, 16.4697],
-    timeAgo: '5 giờ trước',
-    caption: 'Cố đô trầm mặc và cổ kính. Đi vào mùa thu thời tiết man mác nhẹ nhàng.',
-    imageUrl: 'https://images.unsplash.com/photo-1570783457582-77e8a93ffc2b?auto=format&fit=crop&w=800&q=80',
-    likes: 54,
-    comments: 5,
-    isVerified: true,
-    xpEarned: 80,
-  },
-];
 
 const FILTER_TABS = ['Tất cả', 'Cà phê ☕', 'Ẩm thực 🍜', 'Hà Nội', 'TP. HCM', 'Đà Nẵng'];
 
 export default function ExploreScreen() {
   const { user, addXp } = useAuthStore();
-  const { places, setSelectedPlace } = usePlacesStore();
+  const { addPlace, setSelectedPlace } = usePlacesStore();
   const { setCenter, setZoom, selectCity } = useMapStore();
+  const { feed, loadInitialData, toggleLikePost, addFeedItem, addComment, getCommentsForPost } =
+    useCommunityStore();
 
-  const [feed, setFeed] = useState<CommunityFeedItem[]>(INITIAL_FEED);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState('Tất cả');
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [newCaption, setNewCaption] = useState('');
   const [newPlaceName, setNewPlaceName] = useState('');
 
+  // Comment sheet state
+  const [activePostForComments, setActivePostForComments] = useState<CommunityFeedItem | null>(null);
+  const [commentInputText, setCommentInputText] = useState('');
+
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
   const handleToggleLike = (postId: string) => {
     triggerHaptic('light');
-    setLikedPosts((prev) => {
-      const isLiked = !prev[postId];
-      setFeed((currentFeed) =>
-        currentFeed.map((item) =>
-          item.id === postId
-            ? { ...item, likes: item.likes + (isLiked ? 1 : -1) }
-            : item
-        )
-      );
-      return { ...prev, [postId]: isLiked };
-    });
+    const isLiked = !likedPosts[postId];
+    setLikedPosts((prev) => ({ ...prev, [postId]: isLiked }));
+    toggleLikePost(postId, isLiked);
   };
 
   // Jump to map and focus on the selected place
   const handleViewOnMap = (item: CommunityFeedItem) => {
     triggerHaptic('selection');
-    setCenter(item.coordinates);
-    setZoom(16.5);
 
     // If matches city, select city
     const matchedCity = VIETNAM_CITY_PRESETS.find(
@@ -155,14 +77,21 @@ export default function ExploreScreen() {
       selectCity(matchedCity.id);
     }
 
-    // Try finding place in repository
-    const matchedPlace = places.find(
-      (p) =>
-        p.name.toLowerCase().includes(item.placeName.toLowerCase()) ||
-        item.placeName.toLowerCase().includes(p.name.toLowerCase())
+    // Try finding place in repository across all cities
+    const matchedPlace = placeRepository.findPlaceByNameOrCoords(
+      item.placeName,
+      item.coordinates
     );
+
     if (matchedPlace) {
+      addPlace(matchedPlace);
       setSelectedPlace(matchedPlace);
+      setCenter([matchedPlace.longitude, matchedPlace.latitude]);
+      setZoom(16.5);
+    } else {
+      setSelectedPlace(null);
+      setCenter(item.coordinates);
+      setZoom(16.5);
     }
 
     router.replace('/');
@@ -172,28 +101,48 @@ export default function ExploreScreen() {
     if (!newCaption.trim() || !newPlaceName.trim()) return;
 
     triggerHaptic('success');
-    const newFeedItem: CommunityFeedItem = {
-      id: `user-post-${Date.now()}`,
+    const matched = placeRepository.findPlaceByNameOrCoords(newPlaceName.trim());
+    const coords: [number, number] = matched
+      ? [matched.longitude, matched.latitude]
+      : [105.8542, 21.0285];
+    const city = matched
+      ? matched.address.split(',').pop()?.trim() || 'Việt Nam'
+      : 'Việt Nam';
+
+    addFeedItem({
       userName: user?.full_name || 'Khách khám phá',
       userAvatar:
         user?.avatar_url ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      placeName: newPlaceName.trim(),
-      placeCity: 'Việt Nam',
-      coordinates: [105.8542, 21.0285],
+      placeName: matched ? matched.name : newPlaceName.trim(),
+      placeCity: city,
+      coordinates: coords,
       timeAgo: 'Vừa xong',
       caption: newCaption.trim(),
+      imageUrl: matched?.cover_image_url || undefined,
       likes: 1,
       comments: 0,
       isVerified: true,
       xpEarned: 25,
-    };
+    });
 
-    setFeed([newFeedItem, ...feed]);
     addXp(25);
     setNewCaption('');
     setNewPlaceName('');
     setIsPostModalOpen(false);
+  };
+
+  const handleSendComment = () => {
+    if (!activePostForComments || !commentInputText.trim()) return;
+    triggerHaptic('medium');
+    addComment(
+      activePostForComments.id,
+      user?.full_name || 'Bạn',
+      user?.avatar_url ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      commentInputText.trim()
+    );
+    setCommentInputText('');
   };
 
   const filteredFeed = feed.filter((item) => {
@@ -380,7 +329,14 @@ export default function ExploreScreen() {
                       </Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        triggerHaptic('light');
+                        setActivePostForComments(item);
+                      }}
+                    >
                       <MessageCircle size={17} color={THEME.colors.textSecondary} />
                       <Text style={styles.actionCount}>{item.comments}</Text>
                     </TouchableOpacity>
@@ -441,6 +397,77 @@ export default function ExploreScreen() {
               <Send size={16} color="#FFFFFF" />
               <Text style={styles.modalSubmitBtnText}>Đăng bài nhận +25 XP</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Comments Sheet */}
+      <Modal
+        visible={!!activePostForComments}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActivePostForComments(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Bình luận cộng đồng</Text>
+                <Text style={styles.modalSubTitle} numberOfLines={1}>
+                  {activePostForComments?.placeName}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setActivePostForComments(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color={THEME.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Comments List */}
+            <ScrollView style={styles.commentsList} showsVerticalScrollIndicator={false}>
+              {activePostForComments &&
+                getCommentsForPost(activePostForComments.id).map((comment) => (
+                  <View key={comment.id} style={styles.commentItem}>
+                    <Image source={{ uri: comment.userAvatar }} style={styles.commentAvatar} />
+                    <View style={styles.commentBody}>
+                      <View style={styles.commentHeader}>
+                        <Text style={styles.commentAuthor}>{comment.userName}</Text>
+                        <Text style={styles.commentTime}>{comment.timeAgo}</Text>
+                      </View>
+                      <Text style={styles.commentText}>{comment.text}</Text>
+                    </View>
+                  </View>
+                ))}
+              {activePostForComments &&
+                getCommentsForPost(activePostForComments.id).length === 0 && (
+                  <Text style={styles.emptyCommentsText}>
+                    Chưa có bình luận nào. Hãy là người đầu tiên chia sẻ cảm nghĩ!
+                  </Text>
+                )}
+            </ScrollView>
+
+            {/* Comment Input */}
+            <View style={styles.commentInputRow}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Viết bình luận của bạn..."
+                placeholderTextColor={THEME.colors.textMuted}
+                value={commentInputText}
+                onChangeText={setCommentInputText}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.commentSendBtn,
+                  !commentInputText.trim() && styles.commentSendBtnDisabled,
+                ]}
+                onPress={handleSendComment}
+                disabled={!commentInputText.trim()}
+              >
+                <Send size={15} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -807,4 +834,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  modalSubTitle: {
+    color: '#20D6E7',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  commentsList: {
+    maxHeight: 280,
+    marginBottom: 12,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  commentAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4F7DFF',
+  },
+  commentBody: {
+    flex: 1,
+    backgroundColor: '#1B2435',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  commentAuthor: {
+    color: '#F4F7FF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  commentTime: {
+    color: '#76839A',
+    fontSize: 10,
+  },
+  commentText: {
+    color: '#D1D5DB',
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  emptyCommentsText: {
+    color: '#76839A',
+    fontSize: 12.5,
+    textAlign: 'center',
+    paddingVertical: 24,
+    fontStyle: 'italic',
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: '#1B2435',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#F4F7FF',
+    fontSize: 13,
+  },
+  commentSendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4F7DFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4F7DFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  commentSendBtnDisabled: {
+    opacity: 0.45,
+    backgroundColor: '#374151',
+  },
 });
+

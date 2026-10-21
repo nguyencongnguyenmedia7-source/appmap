@@ -3,6 +3,7 @@ import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { Compass, Crosshair, Plus, Minus, Box, Layers, Globe } from 'lucide-react-native';
 import { THEME } from '@/constants/theme';
 import { useMapStore } from '@/store/mapStore';
+import { usePlacesStore } from '@/store/placesStore';
 import { triggerHaptic } from '@/utils/haptics';
 
 interface MapControlsProps {
@@ -19,6 +20,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onZoomOut,
 }) => {
   const { displayMode, toggleDisplayMode, userLocation } = useMapStore();
+  const { selectedPlace } = usePlacesStore();
 
   const handleToggleMode = () => {
     triggerHaptic('medium');
@@ -70,7 +72,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, selectedPlace && styles.containerElevated]}>
       {/* 1. Mode Switcher (2D / 3D / SAT) */}
       <TouchableOpacity
         style={styles.btn}
@@ -136,6 +138,9 @@ const styles = StyleSheet.create({
     zIndex: 90,
     gap: 9,
     alignItems: 'center',
+  },
+  containerElevated: {
+    bottom: 275,
   },
   btn: {
     width: 44,

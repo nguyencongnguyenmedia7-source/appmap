@@ -360,6 +360,47 @@ export const InteractiveWebMapProvider = forwardRef<MapCameraControls, CityMapPr
       }
     }, [selectedPlace?.id]);
 
+    // 3.6 Auto-fly when center/zoom changes from store (e.g. city selector, navigation from other tabs)
+    useEffect(() => {
+      const map = mapInstanceRef.current;
+      if (!map || !isMapReady || !Array.isArray(center)) return;
+      const targetLng = Number(center[0]);
+      const targetLat = Number(center[1]);
+      if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return;
+
+      const current = map.getCenter();
+      const currentZoom = map.getZoom();
+      const latDiff = Math.abs(current.lat - targetLat);
+      const lngDiff = Math.abs(current.lng - targetLng);
+      const zoomDiff = Math.abs(currentZoom - (zoom || currentZoom));
+
+      // If change is significant (not a micro-update from manual drag)
+      if (latDiff > 0.001 || lngDiff > 0.001 || zoomDiff >= 0.5) {
+        isProgrammaticMoveRef.current = true;
+        map.flyTo([targetLat, targetLng], zoom || currentZoom, {
+          duration: 1.0,
+        });
+
+        const timer = setTimeout(() => {
+          try {
+            const bounds = map.getBounds();
+            onRegionChangeComplete(
+              {
+                minLng: bounds.getWest(),
+                minLat: bounds.getSouth(),
+                maxLng: bounds.getEast(),
+                maxLat: bounds.getNorth(),
+              },
+              [targetLng, targetLat],
+              zoom || currentZoom
+            );
+          } catch (_) {}
+        }, 1050);
+
+        return () => clearTimeout(timer);
+      }
+    }, [center[0], center[1], zoom, isMapReady]);
+
     // 4. Update Place Markers
     useEffect(() => {
       const map = mapInstanceRef.current;
@@ -487,9 +528,25 @@ export const InteractiveWebMapProvider = forwardRef<MapCameraControls, CityMapPr
         try {
           isProgrammaticMoveRef.current = true;
           map.flyTo([lat, lng], validZoom, {
-            duration: 1.2,
+            duration: 1.1,
             easeLinearity: 0.25,
           });
+
+          setTimeout(() => {
+            try {
+              const bounds = map.getBounds();
+              onRegionChangeComplete(
+                {
+                  minLng: bounds.getWest(),
+                  minLat: bounds.getSouth(),
+                  maxLng: bounds.getEast(),
+                  maxLat: bounds.getNorth(),
+                },
+                [lng, lat],
+                validZoom
+              );
+            } catch (_) {}
+          }, 1150);
         } catch (_) {}
       },
       setPitch: () => {},
